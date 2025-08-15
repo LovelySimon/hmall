@@ -49,14 +49,15 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             response.setRawStatusCode(401);
             return response.setComplete();
         }
-        //成功获取id，放行
-        System.out.println("userid = "+userId);
-        return chain.filter(exchange);
+        String userInfo = userId.toString();
+        ServerWebExchange ex = exchange.mutate()
+                .request(b->b.header("user-info",userInfo)).build();
+        return chain.filter(ex);
     }
 
     private boolean isExclude(String authPath){
-        for (String path: authProperties.getExcludePaths()){
-            if (antPathMatcher.match(authPath,path)){
+        for (String pathpattern: authProperties.getExcludePaths()){
+            if (antPathMatcher.match(pathpattern,authPath)){
                 return true;
             }
         }
