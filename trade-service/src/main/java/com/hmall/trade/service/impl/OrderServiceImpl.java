@@ -13,15 +13,12 @@ import com.hmall.trade.domain.po.OrderDetail;
 import com.hmall.trade.mapper.OrderMapper;
 import com.hmall.trade.service.IOrderDetailService;
 import com.hmall.trade.service.IOrderService;
+import io.seata.spring.annotation.GlobalTransactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -35,12 +32,11 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements IOrderService {
-
+    private final RabbitTemplate rabbitTemplate;
     private final IOrderDetailService detailService;
     private final ItemClient itemClient;
-    private final CartClient cartClient;
     @Override
-    @Transactional
+    @GlobalTransactional
     public Long createOrder(OrderFormDTO orderFormDTO) {
         // 1.订单数据
         Order order = new Order();
@@ -71,10 +67,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         // 2.保存订单详情
         List<OrderDetail> details = buildDetails(order.getId(), items, itemNumMap);
         detailService.saveBatch(details);
-
-        // 3.清理购物车商品
-        cartClient.removeByItemIds(itemIds);
-
+        // 3.发送异步消息
+        Map<String,Object> message = new HashMap<>();
+        message.put("items",itemIds);
+        message.put("user",UserContext.getUser());
+        rabbitTemplate.convertAndSend("trade.topic","order.create",message);
         // 4.扣减库存
         try {
             itemClient.deductStock(detailDTOS);
@@ -92,6 +89,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         order.setPayTime(LocalDateTime.now());
         updateById(order);
     }
+
 
     private List<OrderDetail> buildDetails(Long orderId, List<ItemDTO> items, Map<Long, Integer> numMap) {
         List<OrderDetail> details = new ArrayList<>(items.size());

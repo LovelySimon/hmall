@@ -52,7 +52,7 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         String userInfo = userId.toString();
         ServerWebExchange ex = exchange.mutate()
                 .request(b->b.header("user-info",userInfo)).build();
-        return chain.filter(ex);
+        return chain.filter(exchange);
     }
 
     private boolean isExclude(String authPath){
